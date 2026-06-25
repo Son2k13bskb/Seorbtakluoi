@@ -185,7 +185,7 @@ end)
 -- // UI WINDOW INITIALIZATION (Fluent Library)
 local Window = Fluent:CreateWindow({
     Title = "Seorb Hub | Update 31",
-    SubTitle = "Main Version - Premium Framework",
+    SubTitle = "Main Version",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,

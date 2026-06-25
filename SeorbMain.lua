@@ -82,62 +82,85 @@ LocalPlayer.Idled:Connect(function()
     VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
 end)
 
--- Safe Custom Smooth Movement Logic (Anti-Instant Teleport Detection)
+-- Thay toàn bộ hàm SmoothMove cũ
 local function SmoothMove(targetCFrame)
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-    local rootPart = character.HumanoidRootPart
     
-    local distance = (rootPart.Position - targetCFrame.Position).Magnitude
-    if distance < 5 then
-        rootPart.CFrame = targetCFrame
+    local root = character.HumanoidRootPart
+    local distance = (root.Position - targetCFrame.Position).Magnitude
+    
+    if distance < 8 then
+        root.CFrame = targetCFrame
         return
     end
+
+    -- BodyVelocity + BodyGyro ổn định hơn Tween rất nhiều
+    local bv = Instance.new("BodyVelocity")
+    local bg = Instance.new("BodyGyro")
     
-    -- Calculates linear velocity path simulation
-    local speed = getgenv().SeorbConfig.FlySpeed
-    local duration = distance / speed
+    bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+    bv.Velocity = (targetCFrame.Position - root.Position).Unit * getgenv().SeorbConfig.FlySpeed
+    bv.Parent = root
     
-    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = targetCFrame})
+    bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+    bg.P = 12500
+    bg.CFrame = targetCFrame
+    bg.Parent = root
+
+    task.wait(distance / getgenv().SeorbConfig.FlySpeed * 0.9)
     
-    -- Temporary disable gravity or platform stand to stabilize
-    character.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-    tween:Play()
-    tween.Completed:Wait()
-    character.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+    bv:Destroy()
+    bg:Destroy()
+    
+    root.CFrame = targetCFrame * CFrame.new(0, 10, 0) -- Đứng trên đầu quái
 end
 
 -- Weapon Equip Handler
 local function EquipWeapon()
     local selected = getgenv().SeorbConfig.WeaponSelect
-    local backpack = LocalPlayer.Backpack
-    local character = LocalPlayer.Character
+    local char = LocalPlayer.Character
+    local bp = LocalPlayer.Backpack
     
-    if character then
-        for _, item in pairs(character:GetChildren()) do
-            if item:IsA("Tool") and item:GetAttribute("ToolTip") ~= selected then
-                item.Parent = backpack
-            end
-        end
-        for _, item in pairs(backpack:GetChildren()) do
-            if item:IsA("Tool") and string.find(item.Name, selected) or (selected == "Fruit" and item:GetAttribute("ToolTip") == "Blox Fruit") then
-                item.Parent = character
+    if not char then return end
+    
+    -- Unequip wrong tool
+    for _, v in pairs(char:GetChildren()) do
+        if v:IsA("Tool") then v.Parent = bp end
+    end
+    
+    -- Find and equip
+    for _, v in pairs(bp:GetChildren()) do
+        if v:IsA("Tool") then
+            local tooltip = v:GetAttribute("ToolTip") or ""
+            if (selected == "Combat" and (v.Name:find("Combat") or tooltip == "Melee")) or
+               (selected == "Sword" and (v.Name:find("Sword") or tooltip == "Sword")) or
+               (selected == "Fruit" and (tooltip == "Blox Fruit" or v.Name:find("Fruit"))) then
+                v.Parent = char
                 break
             end
         end
     end
 end
 
--- Walk on Water Surface Simulation
+-- WalkSpeed + WalkOnWater
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    if char:FindFirstChild("Humanoid") then
+        char.Humanoid.WalkSpeed = getgenv().SeorbConfig.WalkSpeed
+    end
+end)
+
 task.spawn(function()
-    while task.wait(0.5) do
-        if getgenv().SeorbConfig.WalkOnWater then
-            -- Toggles safe invisible platform logic above sea layer boundary
-            local waterLevel = 0 -- Configured floor position
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                if LocalPlayer.Character.HumanoidRootPart.Position.Y <= waterLevel + 2 then
-                    LocalPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(LocalPlayer.Character.HumanoidRootPart.Velocity.X, 0, LocalPlayer.Character.HumanoidRootPart.Velocity.Z)
+    while task.wait(0.1) do
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.WalkSpeed = getgenv().SeorbConfig.WalkSpeed
+            
+            if getgenv().SeorbConfig.WalkOnWater and char:FindFirstChild("HumanoidRootPart") then
+                local root = char.HumanoidRootPart
+                if root.Position.Y < 5 then
+                    root.Velocity = Vector3.new(root.Velocity.X, 10, root.Velocity.Z)
                 end
             end
         end
@@ -175,25 +198,51 @@ end
 -- ==========================================
 -- 1. MA TRẬN TỰ ĐỘNG ĐÁNH (ATTACK SPEED ENGINE)
 -- ==========================================
+-- Attack + Mastery Engine
 task.spawn(function()
     while task.wait() do
-        if getgenv().SeorbConfig.AutoFarmLevel or getgenv().SeorbConfig.AutoFarmBoss or getgenv().SeorbConfig.AutoSeaEvent then
+        if getgenv().SeorbConfig.AutoFarmLevel or getgenv().SeorbConfig.AutoFarmBoss then
             EquipWeapon()
-            local character = LocalPlayer.Character
-            if character and character:FindFirstChildOfClass("Tool") then
-                -- Cấu hình tốc độ đánh dựa trên lựa chọn của người chơi
-                local attackDelay = 0.4 -- Mức bình thường (Attack)
-                if getgenv().SeorbConfig.AttackSpeed == "Fast Attack" then
-                    attackDelay = 0.15
-                elseif getgenv().SeorbConfig.AttackSpeed == "Super Fast Attack" then
-                    attackDelay = 0.01
-                end
+            
+            local char = LocalPlayer.Character
+            local tool = char and char:FindFirstChildOfClass("Tool")
+            
+            if tool then
+                local delay = 0.1
+                if getgenv().SeorbConfig.AttackSpeed == "Fast Attack" then delay = 0.06
+                elseif getgenv().SeorbConfig.AttackSpeed == "Super Fast Attack" then delay = 0.01 end
                 
-                -- Kích hoạt hiệu ứng và gửi Remote chém
-                ReplicatedStorage.Remotes.Validator:FireServer(math.random(1, 9999))
+                -- M1 Attack
                 VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                task.wait(0.03)
                 VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-                task.wait(attackDelay)
+                
+                task.wait(delay)
+            end
+        end
+    end
+end)
+
+-- MAIN FARM LOOP (Tìm quái + di chuyển)
+task.spawn(function()
+    while task.wait(0.5) do
+        if getgenv().SeorbConfig.AutoFarmLevel then
+            local target = nil
+            local lowestHealth = math.huge
+            
+            for _, enemy in pairs(workspace.Enemies:GetChildren()) do
+                if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 and 
+                   enemy:FindFirstChild("HumanoidRootPart") then
+                    local dist = (LocalPlayer.Character.HumanoidRootPart.Position - enemy.HumanoidRootPart.Position).Magnitude
+                    if dist < 500 and enemy.Humanoid.Health < lowestHealth then
+                        lowestHealth = enemy.Humanoid.Health
+                        target = enemy
+                    end
+                end
+            end
+            
+            if target then
+                SmoothMove(target.HumanoidRootPart.CFrame * CFrame.new(0, 12, 0))
             end
         end
     end
@@ -722,11 +771,13 @@ Tabs.Teleport:AddDropdown("IslandSelect", {
     Callback = function(Value) getgenv().SeorbConfig.SelectedIsland = Value end
 })
 Tabs.Teleport:AddButton({
-    Title = "Bắt đầu di chuyển tới Đảo",
+    Title = "Di Chuyển Tới Đảo",
     Callback = function()
-        if getgenv().SeorbConfig.SelectedIsland ~= "None" then
-            TeleportToIsland(getgenv().SeorbConfig.SelectedIsland)
-        end
+        pcall(function()
+            if getgenv().SeorbConfig.SelectedIsland ~= "None" then
+                TeleportToIsland(getgenv().SeorbConfig.SelectedIsland)
+            end
+        end)
     end
 })
 
@@ -1480,16 +1531,18 @@ task.spawn(function()
                 end
             end
             
-            -- Logic Auto Ken Haki
-            if getgenv().SeorbConfig.AutoKen then
-                local vision = LocalPlayer.PlayerGui:FindFirstChild("Vision")
-                -- Vision là GUI hiển thị khi Haki quan sát được bật
-                if not vision or not vision.Enabled then
-                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                    task.wait(0.1)
-                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+            task.spawn(function()
+                while task.wait(3) do
+                    if getgenv().SeorbConfig.AutoKen then
+                        local vision = LocalPlayer.PlayerGui:FindFirstChild("Vision")
+                        if not vision or not vision.Enabled then
+                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                            task.wait(0.1)
+                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                        end
+                    end
                 end
-            end
+            end)
             
         end
     end
@@ -1852,6 +1905,29 @@ AdvancedTab:AddButton({
 
 -- Kích hoạt tải cấu hình tự động (Autoload Config) nếu người dùng đã lưu trước đó
 SaveManager:LoadAutoloadConfig()
+
+-- Nút tròn toggle GUI (Mobile + PC)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0, 50, 0, 50)
+ToggleButton.Position = UDim2.new(0, 20, 0.5, -25)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+ToggleButton.Text = "Seorb"
+ToggleButton.TextColor3 = Color3.new(1,1,1)
+ToggleButton.TextScaled = true
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.Parent = ScreenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(1,0)
+corner.Parent = ToggleButton
+
+ToggleButton.MouseButton1Click:Connect(function()
+    Window:Toggle()
+end)
 
 -- // Finish Initializing
 SaveManager:SetLibrary(Fluent)

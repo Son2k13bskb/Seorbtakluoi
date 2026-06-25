@@ -1328,7 +1328,7 @@ getgenv().SeorbConfig.AutoMirage = false
 getgenv().SeorbConfig.AutoDoughKing = false
 
 local SeaEventsTab = Tabs.SeaEvents
-SeaEventsTab:AddSeparator()
+SeaEventsTab:AddSection()
 SeaEventsTab:AddToggle("MirageGear", {Title = "Auto Tìm Gear (Mirage Island) - V4", Default = false}):OnChanged(function(v) getgenv().SeorbConfig.AutoMirage = v end)
 SeaEventsTab:AddToggle("DoughKing", {Title = "Auto Triệu Hồi & Diệt Dough King", Default = false}):OnChanged(function(v) getgenv().SeorbConfig.AutoDoughKing = v end)
 
@@ -1463,7 +1463,7 @@ getgenv().SeorbConfig.AutoBuso = false
 getgenv().SeorbConfig.AutoKen = false
 
 local MiscTab = Tabs.Misc
-MiscTab:AddSeparator()
+MiscTab:AddSection()
 MiscTab:AddToggle("AutoBusoHaki", {Title = "Auto Bật Haki Vũ Trang (Buso)", Default = false}):OnChanged(function(v) getgenv().SeorbConfig.AutoBuso = v end)
 MiscTab:AddToggle("AutoKenHaki", {Title = "Auto Bật Haki Quan Sát (Ken)", Default = false}):OnChanged(function(v) getgenv().SeorbConfig.AutoKen = v end)
 
@@ -1496,7 +1496,7 @@ task.spawn(function()
 end)
 
 -- 23. Module Đổi Máy Chủ Nhanh (Server Hop)
-MiscTab:AddSeparator()
+MiscTab:AddSection()
 MiscTab:AddButton({
     Title = "Đổi Máy Chủ Mới (Server Hop)",
     Description = "Tìm và chuyển sang Server khác để reset Boss / Hóa giải thời gian chờ",

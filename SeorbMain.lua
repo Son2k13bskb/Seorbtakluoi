@@ -197,16 +197,17 @@ local Window = Fluent:CreateWindow({
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local HttpService = game:GetService("HttpService")
+
 local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 
--- === FIX HOOK REMOTE FUNCTION (CommF_) ===
+-- === FIXED COMM F HOOK (Không crash nữa) ===
 local oldInvoke = CommF.InvokeServer
-CommF.InvokeServer = function(self, ...)
-    -- Giảm spam remote
-    if math.random() < 0.65 then 
-        task.wait(0.02) 
+CommF.InvokeServer = function(self, Method, ...)
+    -- Tránh crash và giảm spam
+    if typeof(Method) == "string" then
+        task.wait(0.015)
     end
-    return oldInvoke(self, ...)
+    return oldInvoke(self, Method, ...)
 end
 
 -- Hàm kiểm tra số dư Tiền (Beli) và Điểm F (Fragments)
@@ -273,18 +274,18 @@ task.spawn(function()
     end
 end)
 
--- Attack Loop (riêng)
+-- Attack Loop (riêng - Giảm spam)
 task.spawn(function()
-    while task.wait() do
+    while task.wait(0.08) do   -- Tăng delay để tránh queue
         if (getgenv().SeorbConfig.AutoFarmLevel or getgenv().SeorbConfig.AutoFarmBoss) then
             EquipWeapon()
             local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
             if tool then
                 local delay = getgenv().SeorbConfig.AttackSpeed == "Super Fast Attack" and 0.01 or 
-                             (getgenv().SeorbConfig.AttackSpeed == "Fast Attack" and 0.06 or 0.12)
+                             (getgenv().SeorbConfig.AttackSpeed == "Fast Attack" and 0.07 or 0.15)
                 
                 VirtualInputManager:SendMouseButtonEvent(0,0,0,true,game,1)
-                task.wait(0.03)
+                task.wait(0.025)
                 VirtualInputManager:SendMouseButtonEvent(0,0,0,false,game,1)
                 task.wait(delay)
             end
@@ -1945,6 +1946,25 @@ AdvancedTab:AddButton({
 
 -- Kích hoạt tải cấu hình tự động (Autoload Config) nếu người dùng đã lưu trước đó
 SaveManager:LoadAutoloadConfig()
+
+-- Anti Crash FortBuilder & Lightning
+pcall(function()
+    local FortBuilder = ReplicatedStorage:FindFirstChild("Util", true) and ReplicatedStorage.Util:FindFirstChild("FortBuilder")
+    if FortBuilder then
+        local oldIndex = FortBuilder.__index
+        setreadonly(FortBuilder, false)
+        FortBuilder.__index = function(t, k)
+            if k == "IsA" then return nil end
+            return oldIndex(t, k)
+        end
+        setreadonly(FortBuilder, true)
+    end
+end)
+
+-- Giảm lỗi Lightning
+pcall(function()
+    game:GetService("ReplicatedStorage").Modules.Asset:FindFirstChild("GetFeaturedFruits").OnClientEvent:Connect(function() end)
+end)
 
 -- Nút tròn toggle GUI (Mobile + PC) - Fix lỗi Toggle
 local ScreenGui = Instance.new("ScreenGui")

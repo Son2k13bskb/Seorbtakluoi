@@ -194,15 +194,18 @@ local Window = Fluent:CreateWindow({
 })
 
 -- [[ SEORB HUB - CORE EXECUTION LOGIC ENGINE ]]
--- Thiết lập các biến môi trường hệ thống Blox Fruits
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local HttpService = game:GetService("HttpService")
 local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 
+-- === FIX HOOK REMOTE FUNCTION (CommF_) ===
 local oldInvoke = CommF.InvokeServer
 CommF.InvokeServer = function(self, ...)
-    if math.random() < 0.7 then task.wait(0.025) end -- Giảm spam
+    -- Giảm spam remote
+    if math.random() < 0.65 then 
+        task.wait(0.02) 
+    end
     return oldInvoke(self, ...)
 end
 
@@ -1174,33 +1177,31 @@ end)
 -- [[ PHẦN 5: LOGIC TRÁI ÁC QUỶ, BOSS RÂU ĐEN & VŨ KHÍ MYTHIC SEA 3 ]]
 -- ====================================================================
 
--- 14. Vòng lặp Quản lý Trái Ác Quỷ
+-- 14. Vòng lặp Quản lý Trái Ác Quỷ (ĐÃ FIX)
 task.spawn(function()
-    while task.wait(2) do
+    while task.wait(2.5) do   -- Tăng delay để tránh lỗi
         -- Auto Random Fruit
         if getgenv().SeorbConfig.AutoRandomFruit then
             pcall(function()
                 CommF:InvokeServer("Cousin", "BuyDemonFruit")
             end)
-            task.wait(15)
         end
 
-        -- Fix Store Fruit
+        -- Auto Store Fruit (Fix nil GetAttribute)
         if getgenv().SeorbConfig.AutoStoreFruit then
             local backpack = LocalPlayer.Backpack
             local character = LocalPlayer.Character
-            
-            for _, tool in pairs(backpack:GetChildren()) do
-                if tool:IsA("Tool") then
-                    local tooltip = tool:GetAttribute("ToolTip") 
-                    if (tooltip == "Blox Fruit") or string.find(tool.Name:lower(), "fruit") then
-                        pcall(function()
-                            if character and character:FindFirstChild("Humanoid") then
+            if character and character:FindFirstChild("Humanoid") then
+                for _, tool in pairs(backpack:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        local tooltip = tool:GetAttribute("ToolTip") or ""
+                        if tooltip == "Blox Fruit" or string.find(tool.Name:lower(), "fruit") then
+                            pcall(function()
                                 character.Humanoid:EquipTool(tool)
-                                task.wait(0.35)
+                                task.wait(0.4)
                                 CommF:InvokeServer("StoreFruit", tool.Name)
-                            end
-                        end)
+                            end)
+                        end
                     end
                 end
             end
@@ -1211,7 +1212,7 @@ task.spawn(function()
             for _, obj in pairs(workspace:GetChildren()) do
                 if obj:IsA("Tool") and obj:FindFirstChild("Handle") and 
                    (string.find(obj.Name, "Fruit") or (obj:GetAttribute("ToolTip") == "Blox Fruit")) then
-                    Fluent:Notify({Title = "Seorb Hub", Content = "Phát hiện Trái Ác Quỷ! Đang bay tới...", Duration = 3})
+                    Fluent:Notify({Title = "Seorb Hub", Content = "Phát hiện Trái Ác Quỷ! Đang bay tới...", Duration = 2.5})
                     SmoothMove(obj.Handle.CFrame)
                     task.wait(1)
                     break

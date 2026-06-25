@@ -193,21 +193,24 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
--- [[ SEORB HUB - CORE EXECUTION LOGIC ENGINE ]]
+-- [[ CORE REMOTES ]]
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local HttpService = game:GetService("HttpService")
 
 local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 
--- === FIXED COMM F HOOK (Không crash nữa) ===
+-- FIXED SAFE HOOK (Không crash)
 local oldInvoke = CommF.InvokeServer
-CommF.InvokeServer = function(self, Method, ...)
-    -- Tránh crash và giảm spam
-    if typeof(Method) == "string" then
-        task.wait(0.015)
-    end
-    return oldInvoke(self, Method, ...)
+CommF.InvokeServer = function(self, ...)
+    local args = {...}
+    -- Bảo vệ hook
+    pcall(function()
+        if #args > 0 and typeof(args[1]) == "string" then
+            task.wait(0.012)
+        end
+    end)
+    return oldInvoke(self, ...)
 end
 
 -- Hàm kiểm tra số dư Tiền (Beli) và Điểm F (Fragments)
@@ -1947,17 +1950,39 @@ AdvancedTab:AddButton({
 -- Kích hoạt tải cấu hình tự động (Autoload Config) nếu người dùng đã lưu trước đó
 SaveManager:LoadAutoloadConfig()
 
--- Anti Crash FortBuilder & Lightning
+-- Anti Crash Humanoid & Other Errors
 pcall(function()
-    local FortBuilder = ReplicatedStorage:FindFirstChild("Util", true) and ReplicatedStorage.Util:FindFirstChild("FortBuilder")
-    if FortBuilder then
-        local oldIndex = FortBuilder.__index
-        setreadonly(FortBuilder, false)
-        FortBuilder.__index = function(t, k)
-            if k == "IsA" then return nil end
+    local mt = getrawmetatable(game)
+    local old = mt.__namecall
+    setreadonly(mt, false)
+    
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if method == "FindFirstChild" or method == "WaitForChild" then
+            if args[1] == "Humanoid" and self.Name == "Isle Champion" then
+                return nil
+            end
+        end
+        
+        return old(self, ...)
+    end)
+    
+    setreadonly(mt, true)
+end)
+
+-- Anti FortBuilder Crash
+pcall(function()
+    local fb = ReplicatedStorage:FindFirstChild("Util", true) and ReplicatedStorage.Util:FindFirstChild("FortBuilder")
+    if fb then
+        local oldIndex = fb.__index
+        setreadonly(fb, false)
+        fb.__index = function(t, k)
+            if tostring(k) == "IsA" then return function() return false end end
             return oldIndex(t, k)
         end
-        setreadonly(FortBuilder, true)
+        setreadonly(fb, true)
     end
 end)
 

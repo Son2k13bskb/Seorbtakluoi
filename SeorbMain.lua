@@ -1,5 +1,6 @@
 -- [[ SEORB HUB - MAIN VERSION (UPDATE 31) ]]
 -- Developed for GitHub Deployment & Kaitun Integration
+-- Anti Remote Spam
 
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
@@ -83,37 +84,51 @@ LocalPlayer.Idled:Connect(function()
 end)
 
 -- Thay toàn bộ hàm SmoothMove cũ
+-- === SMOOTH MOVE MỚI (TỐT NHẤT HIỆN TẠI) ===
+local Flying = false
+local BodyVelocity, BodyGyro
+
+local function StartFly()
+    if Flying then return end
+    Flying = true
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    
+    BodyVelocity = Instance.new("BodyVelocity")
+    BodyGyro = Instance.new("BodyGyro")
+    
+    BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    BodyVelocity.Velocity = Vector3.new(0,0,0)
+    BodyVelocity.Parent = root
+    
+    BodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    BodyGyro.P = 10000
+    BodyGyro.Parent = root
+end
+
+local function StopFly()
+    Flying = false
+    if BodyVelocity then BodyVelocity:Destroy() BodyVelocity = nil end
+    if BodyGyro then BodyGyro:Destroy() BodyGyro = nil end
+end
+
 local function SmoothMove(targetCFrame)
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local root = char.HumanoidRootPart
     
-    local root = character.HumanoidRootPart
+    StartFly()
+    
     local distance = (root.Position - targetCFrame.Position).Magnitude
+    local speed = getgenv().SeorbConfig.FlySpeed
     
-    if distance < 8 then
-        root.CFrame = targetCFrame
-        return
-    end
-
-    -- BodyVelocity + BodyGyro ổn định hơn Tween rất nhiều
-    local bv = Instance.new("BodyVelocity")
-    local bg = Instance.new("BodyGyro")
+    BodyVelocity.Velocity = (targetCFrame.Position - root.Position).Unit * speed
+    BodyGyro.CFrame = targetCFrame
     
-    bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-    bv.Velocity = (targetCFrame.Position - root.Position).Unit * getgenv().SeorbConfig.FlySpeed
-    bv.Parent = root
+    task.wait(math.min(distance / speed * 0.85, 1.5))
     
-    bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-    bg.P = 12500
-    bg.CFrame = targetCFrame
-    bg.Parent = root
-
-    task.wait(distance / getgenv().SeorbConfig.FlySpeed * 0.9)
-    
-    bv:Destroy()
-    bg:Destroy()
-    
-    root.CFrame = targetCFrame * CFrame.new(0, 10, 0) -- Đứng trên đầu quái
+    -- Đứng ổn định
+    root.CFrame = targetCFrame * CFrame.new(0, 12, 0)
 end
 
 -- Weapon Equip Handler
@@ -185,6 +200,12 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local HttpService = game:GetService("HttpService")
 local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 
+local oldInvoke = CommF.InvokeServer
+CommF.InvokeServer = function(self, ...)
+    if math.random() < 0.7 then task.wait(0.025) end -- Giảm spam
+    return oldInvoke(self, ...)
+end
+
 -- Hàm kiểm tra số dư Tiền (Beli) và Điểm F (Fragments)
 local function GetPlayerStats()
     local data = LocalPlayer:FindFirstChild("Data")
@@ -223,26 +244,46 @@ task.spawn(function()
     end
 end)
 
--- MAIN FARM LOOP (Tìm quái + di chuyển)
+-- MAIN FARM + ATTACK (Tách biệt như Banana Hub)
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(0.3) do
         if getgenv().SeorbConfig.AutoFarmLevel then
             local target = nil
-            local lowestHealth = math.huge
+            local best = 99999
             
             for _, enemy in pairs(workspace.Enemies:GetChildren()) do
-                if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 and 
-                   enemy:FindFirstChild("HumanoidRootPart") then
+                if enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
                     local dist = (LocalPlayer.Character.HumanoidRootPart.Position - enemy.HumanoidRootPart.Position).Magnitude
-                    if dist < 500 and enemy.Humanoid.Health < lowestHealth then
-                        lowestHealth = enemy.Humanoid.Health
+                    if dist < best and dist < 700 then
+                        best = dist
                         target = enemy
                     end
                 end
             end
             
             if target then
-                SmoothMove(target.HumanoidRootPart.CFrame * CFrame.new(0, 12, 0))
+                SmoothMove(target.HumanoidRootPart.CFrame * CFrame.new(0, 15, 0))
+            end
+        else
+            StopFly()
+        end
+    end
+end)
+
+-- Attack Loop (riêng)
+task.spawn(function()
+    while task.wait() do
+        if (getgenv().SeorbConfig.AutoFarmLevel or getgenv().SeorbConfig.AutoFarmBoss) then
+            EquipWeapon()
+            local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            if tool then
+                local delay = getgenv().SeorbConfig.AttackSpeed == "Super Fast Attack" and 0.01 or 
+                             (getgenv().SeorbConfig.AttackSpeed == "Fast Attack" and 0.06 or 0.12)
+                
+                VirtualInputManager:SendMouseButtonEvent(0,0,0,true,game,1)
+                task.wait(0.03)
+                VirtualInputManager:SendMouseButtonEvent(0,0,0,false,game,1)
+                task.wait(delay)
             end
         end
     end
@@ -521,6 +562,7 @@ local Tabs = {
 -- [[ TAB: MAIN FARM ]]
 Tabs.MainFarm:AddToggle("AutoLevel", {Title = "Auto Farm Level", Default = false}):OnChanged(function(Value)
     getgenv().SeorbConfig.AutoFarmLevel = Value
+    if not Value then StopFly() end
 end)
 
 Tabs.MainFarm:AddDropdown("WeaponSelect", {
@@ -1132,51 +1174,47 @@ end)
 -- [[ PHẦN 5: LOGIC TRÁI ÁC QUỶ, BOSS RÂU ĐEN & VŨ KHÍ MYTHIC SEA 3 ]]
 -- ====================================================================
 
--- 14. Vòng lặp Quản lý Trái Ác Quỷ Nâng Cao (Advanced Fruit Manager)
+-- 14. Vòng lặp Quản lý Trái Ác Quỷ
 task.spawn(function()
     while task.wait(2) do
-        -- A. Tự động Gacha Trái Ác Quỷ (Khi đủ thời gian hồi và đủ tiền)
+        -- Auto Random Fruit
         if getgenv().SeorbConfig.AutoRandomFruit then
-            local success, err = CommF:InvokeServer("Cousin", "BuyDemonFruit")
-            if success then
-                Fluent:Notify({Title = "Seorb Hub", Content = "Đã thực hiện Gacha Trái Ác Quỷ ngẫu nhiên!", Duration = 4})
-            end
-            task.wait(15) -- Giới hạn thời gian lặp để tránh nghẽn đường truyền Remote
+            pcall(function()
+                CommF:InvokeServer("Cousin", "BuyDemonFruit")
+            end)
+            task.wait(15)
         end
 
-        -- B. Tự động cất giấu Trái Ác Quỷ vào rương kho lưu trữ (Auto Store)
+        -- Fix Store Fruit
         if getgenv().SeorbConfig.AutoStoreFruit then
-            local character = LocalPlayer.Character
             local backpack = LocalPlayer.Backpack
+            local character = LocalPlayer.Character
             
-            -- Kiểm tra trong balo (Backpack)
             for _, tool in pairs(backpack:GetChildren()) do
-                if tool:IsA("Tool") and (string.find(tool.Name, "Fruit") or tool:GetAttribute("ToolTip") == "Blox Fruit") then
-                    if character and character:FindFirstChild("Humanoid") then
-                        character.Humanoid:EquipTool(tool) -- Cầm lên tay để kích hoạt trạng thái vật phẩm
-                        task.wait(0.4)
-                        CommF:InvokeServer("StoreFruit", tool.Name)
+                if tool:IsA("Tool") then
+                    local tooltip = tool:GetAttribute("ToolTip") 
+                    if (tooltip == "Blox Fruit") or string.find(tool.Name:lower(), "fruit") then
+                        pcall(function()
+                            if character and character:FindFirstChild("Humanoid") then
+                                character.Humanoid:EquipTool(tool)
+                                task.wait(0.35)
+                                CommF:InvokeServer("StoreFruit", tool.Name)
+                            end
+                        end)
                     end
                 end
             end
-            -- Kiểm tra nếu đang cầm sẵn trên tay
-            for _, tool in pairs(character:GetChildren()) do
-                if tool:IsA("Tool") and (string.find(tool.Name, "Fruit") or tool:GetAttribute("ToolTip") == "Blox Fruit") then
-                    CommF:InvokeServer("StoreFruit", tool.Name)
-                end
-            end
         end
 
-        -- C. Tự động dịch chuyển nhặt Trái Ác Quỷ rơi tự do trên bản đồ (Fruit Sniper)
+        -- Auto Teleport Fruit
         if getgenv().SeorbConfig.AutoTeleportFruit then
             for _, obj in pairs(workspace:GetChildren()) do
-                if obj:IsA("Tool") and (string.find(obj.Name, "Fruit") or obj:GetAttribute("ToolTip") == "Blox Fruit") then
-                    if obj:FindFirstChild("Handle") then
-                        Fluent:Notify({Title = "Seorb Hub", Content = "Phát hiện Trái Ác Quỷ tự nhiên! Đang bay tới nhặt...", Duration = 3})
-                        SmoothMove(obj.Handle.CFrame)
-                        task.wait(1)
-                        break
-                    end
+                if obj:IsA("Tool") and obj:FindFirstChild("Handle") and 
+                   (string.find(obj.Name, "Fruit") or (obj:GetAttribute("ToolTip") == "Blox Fruit")) then
+                    Fluent:Notify({Title = "Seorb Hub", Content = "Phát hiện Trái Ác Quỷ! Đang bay tới...", Duration = 3})
+                    SmoothMove(obj.Handle.CFrame)
+                    task.wait(1)
+                    break
                 end
             end
         end
@@ -1531,13 +1569,14 @@ task.spawn(function()
                 end
             end
             
+            -- Auto Haki (Sửa spam)
             task.spawn(function()
-                while task.wait(3) do
+                while task.wait(3.5) do
                     if getgenv().SeorbConfig.AutoKen then
                         local vision = LocalPlayer.PlayerGui:FindFirstChild("Vision")
                         if not vision or not vision.Enabled then
                             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                            task.wait(0.1)
+                            task.wait(0.2)
                             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
                         end
                     end
@@ -1831,7 +1870,7 @@ AdvancedTab:AddSection("Discord Webhook Tracker")
 AdvancedTab:AddInput("WebhookURL", {
     Title = "Webhook URL",
     Default = "",
-    Placeholder = "https://discord.com/api/webhooks/1519707362615754785/YroRwjN_jyzMXmJIPzTMIRV0wKLlvFa5uwEuXtS8hPsGXLCBEGOCMBc3A25IpTOO653n",
+    Placeholder = "https://discord.com/api/webhooks/blabla",
     Numeric = false,
     Finished = true,
     Callback = function(Value)
@@ -1906,15 +1945,15 @@ AdvancedTab:AddButton({
 -- Kích hoạt tải cấu hình tự động (Autoload Config) nếu người dùng đã lưu trước đó
 SaveManager:LoadAutoloadConfig()
 
--- Nút tròn toggle GUI (Mobile + PC)
+-- Nút tròn toggle GUI (Mobile + PC) - Fix lỗi Toggle
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local ToggleButton = Instance.new("TextButton")
-ToggleButton.Size = UDim2.new(0, 50, 0, 50)
-ToggleButton.Position = UDim2.new(0, 20, 0.5, -25)
-ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+ToggleButton.Size = UDim2.new(0, 55, 0, 55)
+ToggleButton.Position = UDim2.new(0, 20, 0.5, -30)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
 ToggleButton.Text = "Seorb"
 ToggleButton.TextColor3 = Color3.new(1,1,1)
 ToggleButton.TextScaled = true
@@ -1922,11 +1961,28 @@ ToggleButton.Font = Enum.Font.GothamBold
 ToggleButton.Parent = ScreenGui
 
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(1,0)
+corner.CornerRadius = UDim.new(1, 0)
 corner.Parent = ToggleButton
 
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 2
+stroke.Color = Color3.fromRGB(255,255,255)
+stroke.Parent = ToggleButton
+
 ToggleButton.MouseButton1Click:Connect(function()
-    Window:Toggle()
+    pcall(function()
+        if Window and Window.Minimize then
+            Window:Minimize()           -- Phần lớn Fluent hỗ trợ Minimize
+        elseif Window and Window.ToggleVisibility then
+            Window:ToggleVisibility()
+        else
+            -- Fallback: Ẩn/Hiện GUI thủ công
+            local mainFrame = Window and Window.Main or nil
+            if mainFrame then
+                mainFrame.Visible = not mainFrame.Visible
+            end
+        end
+    end)
 end)
 
 -- // Finish Initializing

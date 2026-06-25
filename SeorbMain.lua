@@ -201,17 +201,17 @@ local HttpService = game:GetService("HttpService")
 local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 
 -- FIXED SAFE HOOK (Không crash)
-local oldInvoke = CommF.InvokeServer
-CommF.InvokeServer = function(self, ...)
-    local args = {...}
+-- local oldInvoke = CommF.InvokeServer
+-- CommF.InvokeServer = function(self, ...)
+    -- local args = {...}
     -- Bảo vệ hook
-    pcall(function()
-        if #args > 0 and typeof(args[1]) == "string" then
-            task.wait(0.012)
-        end
-    end)
-    return oldInvoke(self, ...)
-end
+    -- pcall(function()
+        -- if #args > 0 and typeof(args[1]) == "string" then
+            -- task.wait(0.012)
+        -- end
+    -- end)
+    -- return oldInvoke(self, ...)
+-- end
 
 -- Hàm kiểm tra số dư Tiền (Beli) và Điểm F (Fragments)
 local function GetPlayerStats()

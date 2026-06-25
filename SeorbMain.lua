@@ -488,7 +488,7 @@ Tabs.MainFarm:AddDropdown("AttackSpeed", {
     Callback = function(Value) getgenv().SeorbConfig.AttackSpeed = Value end
 })
 
-Tabs.MainFarm:AddSeparator()
+Tabs.MainFarm:AddSection("Boss Settings")
 
 Tabs.MainFarm:AddDropdown("SelectBoss", {
     Title = "Select Spawned Boss",
